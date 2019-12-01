@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>KODER</title>
+    <!-- require.js obtido daqui: https://github.com/antlr/antlr4/blob/master/runtime/JavaScript/src/lib/require.js -->
+    <script src="lib/require.js"></script>
+    <script src="//cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
+    <script src="//code.jquery.com/jquery-3.4.1.min.js"></script>
+    <script src="//cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"></script>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+    <style>
+        body {
+            padding-top: 80px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container p-3">
+        <nav class="navbar fixed-top navbar-dark bg-dark">
+            <div class="container">
+                <span class="navbar-brand mb-0 h1">Koder!</span>
+            </div>
+        </nav>
+        <div>
+            <p>Ajude nosso herói a encontrar o tesouro usando códigos! Sobretudo, <strong>cuidado</strong>! Fuja dos
+                dragões!</strong></p>
+        </div>
+        <div class="row">
+            <div class="col">
+                <div>
+                    <textarea id="input"
+                        style="width: 100%; height: 360px; font-family: 'Courier New', Courier, monospace;"></textarea>
+                </div>
+                <div>
+                    <button class="btn btn-primary" onclick="executar()">Executar</button>
+                    <button class="btn btn-default" onclick="limpar()">Limpar</button>
+                </div>
+            </div>
+            <div class="col">
+                <div id="game"></div>
+            </div>
+        </div>
+        <p class="mt-3">Os comandos disponíveis são:</p>
+        <ul>
+            <li><strong>direita <i>n</i></strong>: move o player <i>n</i> posições para a direita</li>
+            <li><strong>esquerda <i>n</i></strong>: move o player <i>n</i> posições para a esquerda</li>
+            <li><strong>para baixo <i>n</i></strong>: move o player <i>n</i> posições para baixo</li>
+            <li><strong>para cima <i>n</i></strong>: move o player <i>n</i> posições para cima</li>
+        </ul>
+    </div>
+
+    <ul id="resultado"></ul>
+
+    <script type="text/javascript">
+        var player;
+        var isPlayerAlive = true;
+        var enemies;
+        var treasure;
+        var playerSpeed = 1.5;
+        var enemySpeed = 2;
+        var enemyMaxY = 280;
+        var enemyMinY = 80;
+
+        var comandos = [];
+
+        var config = {
+            parent: 'game',
+            type: Phaser.AUTO,
+            width: 640,
+            height: 360,
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    debug: true
+                }
+            },
+            scene: {
+                preload: preload,
+                create: create,
+                update: update
+            }
+        };
+
+        var game = new Phaser.Game(config);
+
+        function preload() {
+            this.load.image('background', 'assets/background.png');
+            this.load.image('player', 'assets/player.png');
+            this.load.image('dragon', 'assets/dragon.png');
+            this.load.image('treasure', 'assets/treasure.png');
+        }
+
+        var timerEvent;
+
+        function create() {
+            isPlayerAlive = true;
+            this.add.sprite(0, 0, 'background').setOrigin(0, 0);
+            player = this.physics.add.sprite(40, game.config.height / 2, 'player')
+                .setOrigin(0, 0)
+                .setScale(0.5);
+            treasure = this.physics.add.sprite(game.config.width - 80, game.config.height / 2, 'treasure')
+                .setScale(0.6);
+            enemies = this.add.group({
+                key: 'dragon',
+                repeat: 1,
+                setXY: {
+                    x: 150,
+                    y: 100,
+                    stepX: 200,
+                    stepY: 20
+                }
+            });
+            Phaser.Actions.ScaleXY(enemies.getChildren(), -0.5, -0.5);
+            Phaser.Actions.Call(enemies.getChildren(), function (enemy) {
+                enemy.speed = Math.random() * 2 + 1;
+            }, this);
+
+            this.cameras.main.resetFX();
+
+            timerEvent = this.time.addEvent({ delay: 1000, callback: play, callbackScope: this, loop: true });
+        }
+
+        function update(time, delta) {
+            if (!isPlayerAlive) {
+                return;
+            }
+            if (Phaser.Geom.Intersects.RectangleToRectangle(player.getBounds(), treasure.getBounds())) {
+                this.time.delayedCall(250, function () {
+                    alert('Parabéns! Você alcançou o tesouro!');
+                    this.scene.restart();
+                }, [], this);
+            }
+            var ns = enemies.getChildren();
+            let numEnemies = ns.length;
+
+            for (let i = 0; i < numEnemies; i++) {
+                ns[i].y += ns[i].speed;
+                if (ns[i].y >= enemyMaxY && ns[i].speed > 0) {
+                    ns[i].speed *= -1;
+                } else if (ns[i].y <= enemyMinY && ns[i].speed < 0) {
+                    ns[i].speed *= -1;
+                }
+                if (Phaser.Geom.Intersects.RectangleToRectangle(player.getBounds(), ns[i].getBounds())) {
+                    gameOver(this);
+                    break;
+                }
+            }
+        }
+
+        function play() {
+            var comando = comandos.shift();
+            if (comando) {
+                if (comando.comando == 'direita') {
+                    player.x += comando.argumento * 10;
+                }
+                if (comando.comando == 'esquerda') {
+                    player.x -= comando.argumento * 10;
+                }
+                if (comando.comando == 'para cima') {
+                    player.y -= comando.argumento * 10;
+                }
+                if (comando.comando == 'para baixo') {
+                    player.y += comando.argumento * 10;
+                }
+            }
+        }
+
+        function addComando(comando, argumento) {
+            comandos.push({ comando, argumento });
+        }
+
+        function gameOver(scene) {
+            isPlayerAlive = false;
+            scene.cameras.main.shake(500);
+            scene.time.delayedCall(250, function () {
+                scene.cameras.main.fade(250);
+            }, [], this);
+            scene.time.delayedCall(500, function () {
+                alert('Ouch! O dragão te acertou!');
+                scene.scene.restart();
+            }, [], this);
+        };
+
+        function limpar() {
+            $('#input').val('');
+            $('#resultado').empty();
+            game.scene.scenes[0].scene.restart();
+        }
+
+        function executar() {
+            var input = $('#input').val();
+            if (input.length == '') {
+                alert('Por favor, forneça o programa como entrada');
+                return;
+            }
+
+            $('#resultado').empty();
+
+            var antlr4 = require('./antlr4/index');
+            var KoderLexer = require('./parser/KoderLexer').KoderLexer;
+            var KoderParser = require('./parser/KoderParser').KoderParser;
+            var KoderGameVisitor = require('./parser/KoderGameVisitor').KoderGameVisitor;
+
+            var chars = new antlr4.InputStream(input);
+            var lexer = new KoderLexer(chars);
+            var tokens = new antlr4.CommonTokenStream(lexer);
+            var parser = new KoderParser(tokens);
+            var visitor = new KoderGameVisitor(game, player);
+
+            parser.buildParseTrees = true;
+            var tree = parser.programa();
+            visitor.visitPrograma(tree);
+        }
+    </script>
+
+</body>
+
+</html>
